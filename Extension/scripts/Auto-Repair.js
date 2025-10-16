@@ -106,6 +106,7 @@
     region: null,
     paintWhitePixels: true,
     paintTransparentPixels: true, // Changed to true to fix transparent pixel detection
+    scanBottomUp: false, // New state for bottom-up scanning
     autoRepairEnabled: false,
     autoRepairInterval: 30,
     autoRepairTimer: null,
@@ -1671,14 +1672,19 @@
       Utils.addDebugLog('Using restored data - skipping tile wait for damage scan', 'info');
     }
 
-    Utils.addDebugLog(`Scanning ${width}x${height} image for damage (transparent detection: ${state.paintTransparentPixels})...`, 'info');
+    Utils.addDebugLog(`Scanning ${width}x${height} image for damage (transparent detection: ${state.paintTransparentPixels}, bottom-up: ${state.scanBottomUp})...`, 'info');
 
     let scannedPixels = 0;
     let transparentPixelsDetected = 0;
     let wrongColorPixelsDetected = 0;
     let lastProgressUpdate = Date.now();
-    
-    for (let y = 0; y < height; y++) {
+
+    // Determine scan direction
+    const yStart = state.scanBottomUp ? height - 1 : 0;
+    const yEnd = state.scanBottomUp ? -1 : height;
+    const yStep = state.scanBottomUp ? -1 : 1;
+
+    for (let y = yStart; y !== yEnd; y += yStep) {
       for (let x = 0; x < width; x++) {
         if (state.stopFlag) break;
 
@@ -1807,10 +1813,12 @@
       }
 
       if (state.autonomousMode && Date.now() - lastProgressUpdate > 5000) {
-        Utils.addDebugLog(`Scan progress: ${y}/${height} rows (${Math.round((y / height) * 100)}%), found ${damagedPixels.length} damaged (${transparentPixelsDetected} transparent, ${wrongColorPixelsDetected} wrong color)`, 'info');
+        const progressY = state.scanBottomUp ? (height - 1 - y) : y;
+        Utils.addDebugLog(`Scan progress: ${progressY}/${height} rows (${Math.round((progressY / height) * 100)}%), found ${damagedPixels.length} damaged (${transparentPixelsDetected} transparent, ${wrongColorPixelsDetected} wrong color)`, 'info');
         lastProgressUpdate = Date.now();
       } else if (!state.autonomousMode && y % 10 === 0) {
-        Utils.addDebugLog(`Scan progress: ${y}/${height} rows (${Math.round((y / height) * 100)}%)`, 'info');
+        const progressY = state.scanBottomUp ? (height - 1 - y) : y;
+        Utils.addDebugLog(`Scan progress: ${progressY}/${height} rows (${Math.round((progressY / height) * 100)}%)`, 'info');
       }
     }
 
@@ -2830,6 +2838,14 @@
                 <span class="batch-control-label">🔧 Repair Transparent Pixels</span>
               </label>
             </div>
+
+            <!-- Bottom-Up Scanning Control -->
+            <div class="batch-control-group">
+              <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="checkbox" id="scanBottomUp" ${state.scanBottomUp ? 'checked' : ''} class="neon-checkbox">
+                <span class="batch-control-label">⬇️ Scan Bottom-Up (Y-axis)</span>
+              </label>
+            </div>
           </div>
           
           <div style="margin-top: 10px; font-size: 8px;" class="neon-text info">
@@ -3192,6 +3208,12 @@
       Utils.addDebugLog(`Transparent pixel repair ${state.paintTransparentPixels ? 'enabled' : 'disabled'}`, 'info');
     });
 
+    // Bottom-up scanning toggle
+    document.getElementById('scanBottomUp').addEventListener('change', (e) => {
+      state.scanBottomUp = e.target.checked;
+      Utils.addDebugLog(`Bottom-up scanning ${state.scanBottomUp ? 'enabled' : 'disabled'}`, 'info');
+    });
+
     // Clear debug
     document.getElementById('clearDebugBtn').addEventListener('click', () => {
       state.debugLogs = [];
@@ -3223,13 +3245,20 @@
       data.version = '3.0';
       Utils.addDebugLog('Migrated to autonomous features v3.0', 'info');
     }
+
+    // Migration for bottom-up scanning feature
+    if (data.version === '3.0') {
+      data.state.scanBottomUp = data.state.scanBottomUp ?? false;
+      data.version = '3.1';
+      Utils.addDebugLog('Migrated to bottom-up scanning feature v3.1', 'info');
+    }
     
     return data;
   }
 
   // Main initialization function
   async function initialize() {
-    Utils.addDebugLog('Starting WPlace Autonomous Repair Tool v3.0...', 'info');
+    Utils.addDebugLog('Starting WPlace Autonomous Repair Tool v3.1...', 'info');
     
     // Create UI first
     createUI();
